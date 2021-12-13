@@ -96,3 +96,90 @@ Section RTree_rect.
     assumption.
   Defined.
 End RTree_rect.
+
+Definition RTree_root {A : Type} (t : RTree A) : A :=
+  match t with
+  | RTree_cons e _ => e
+  end.
+
+Fixpoint RTForallT_True {A : Type} t :
+  RTForallT (fun _ : A => True) t.
+Proof.
+  induction t.
+  induction l.
+  { constructor.
+    constructor.
+  }
+  constructor.
+  { apply RTForallT_True. }
+  assumption.
+Defined.
+
+Lemma RTForallT_forall {A : Type} (P : A -> Type) :
+  (forall a : A, P a) ->
+  forall t, RTForallT P t.
+Proof.
+  intros.
+  apply RTree_rect0 with (Q := (fun _ => True)).
+  2: {
+    apply RTForallT_True.
+  }
+  intros.
+  induction X0; constructor; auto.
+Qed.
+
+Lemma ForallT_dec {A : Type} (P : A -> Type) :
+  (forall a : A, P a + (P a -> False)) ->
+  forall l, ForallT P l + (ForallT P l -> False).
+Proof.
+Admitted.
+
+Lemma ForallT_dec_lift {A : Type} (P : A -> Type) l :
+  ForallT (fun D => (P D) + (P D -> False))%type l ->
+  ForallT P l + (ForallT P l -> False).
+Proof.
+  intros.
+  induction X.
+  { left. constructor. }
+  destruct p.
+  2: {
+    right.
+    intros.
+    inversion X0; subst; clear X0.
+    contradiction.
+  }
+  destruct IHX.
+  - left. constructor; assumption.
+  - right. intros.
+    inversion X0; subst; clear X0.
+    contradiction.
+Qed.
+
+Fixpoint ForallT_map {A : Type} {P : A -> Type} {Q : A -> Type} (f : forall a, P a -> Q a)
+      (l : list A) (H : ForallT P l) :
+  list { a & { b : P a & Q a } } :=
+  match H with
+  | ForallT_nil _ => []
+  | ForallT_cons _ a l Ha Hl => (existT _ a (existT _ Ha (f a Ha))) :: (ForallT_map f l Hl)
+  end.
+
+Lemma ForallT_impl {A : Type} {P Q : A -> Type} :
+  (forall a, P a -> Q a) ->
+  forall l,
+    ForallT P l ->
+    ForallT Q l.
+Proof.
+  intros.
+  induction X0; constructor; auto.
+Defined.
+
+Lemma ForallT_map0 {A B : Type} (f : A -> B) (P : B -> Type) (l : list A) :
+  ForallT (fun x : A => P (f x)) l ->
+  ForallT P (map f l).
+Proof.
+  intros.
+  induction X.
+  { constructor. }
+  simpl.
+  constructor; assumption.
+Qed.

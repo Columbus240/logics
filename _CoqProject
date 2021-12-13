@@ -1,4 +1,5 @@
 -R theories Logics
 
+theories/Calculi.v
 theories/Utils.v
 theories/FOL.v
