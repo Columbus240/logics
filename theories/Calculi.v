@@ -1,5 +1,8 @@
 (* MAYBE: Define a separate type for schematic rules to simplify using
    them? *)
+(* MAYBE: Find an easy to use notation for rose trees. Maybe some one has
+already written a library for these kinds of trees which I can use? Maybe for
+another programming language? *)
 
 Set Primitive Projections.
 Set Universe Polymorphism.

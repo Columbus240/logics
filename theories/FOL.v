@@ -158,6 +158,147 @@ Section PropositionalLanguage.
     |}.
 End PropositionalLanguage.
 
+Variant impl_neg :=
+| impl | neg.
+
+Definition impl_neg_Sig :=
+  {| connective := impl_neg;
+    connective_arity :=
+    fun p =>
+      match p with
+      | impl => unit + unit
+      | neg => unit
+      end%type;
+  |}.
+
+Definition INS_neg {var} (A : PropFormula impl_neg_Sig var) :
+  PropFormula impl_neg_Sig var :=
+  PF_connective
+    impl_neg_Sig var neg
+    (fun _ => A).
+
+Definition INS_impl {var} (A B : PropFormula impl_neg_Sig var) :
+  PropFormula impl_neg_Sig var :=
+  PF_connective
+    impl_neg_Sig var impl
+    (fun p =>
+       match p with
+       | inl _ => A
+       | inr _ => B
+       end).
+
+Definition HCPC_CL1 {var} (A B : PropFormula impl_neg_Sig var)
+  : PropFormula impl_neg_Sig var :=
+  INS_impl A (INS_impl B A).
+
+Definition HCPC_CL2 {var} (A B C : PropFormula impl_neg_Sig var)
+  : PropFormula impl_neg_Sig var :=
+  INS_impl (INS_impl A (INS_impl B C))
+           (INS_impl (INS_impl A B) (INS_impl A C)).
+
+Definition HCPC_CL3 {var} (A B : PropFormula impl_neg_Sig var)
+  : PropFormula impl_neg_Sig var :=
+  INS_impl
+    (INS_impl (INS_neg A)
+              (INS_neg B))
+    (INS_impl B A).
+
+Require Import List.
+Import ListNotations.
+
+Definition INS_MP {var} A B :
+  Inference (PropFormula impl_neg_Sig var) :=
+  {|
+    premises := [A; INS_impl A B];
+    conclusion := B
+  |}.
+
+Definition Inference_Axiom {S} (A : S) : Inference S :=
+  {|
+    premises := [];
+    conclusion := A;
+  |}.
+
+Variant HCPC_rules :=
+  HCPCr_CL1 | HCPCr_CL2 | HCPCr_CL3 | HCPCr_MP.
+
+Definition HCPC : Calculus :=
+  PropHilbertCalculus
+    impl_neg_Sig
+    nat
+    (fun r : HCPC_rules =>
+       match r with
+       | HCPCr_MP =>
+           (fun p => exists A B, p = INS_MP A B)
+       | HCPCr_CL1 =>
+           (fun p => exists A B, p = Inference_Axiom (HCPC_CL1 A B))
+       | HCPCr_CL3 =>
+           (fun p => exists A B, p = Inference_Axiom (HCPC_CL3 A B))
+       | HCPCr_CL2 => (fun p => exists A B C, p = Inference_Axiom (HCPC_CL2 A B C))
+       end).
+
+Require Import Ensembles.
+
+Fact HCPC_impl_refl A :
+  @Derivable HCPC (Empty_set _) (INS_impl A A).
+Proof.
+  unshelve eexists.
+  - constructor.
+    { split.
+      2: apply (Some HCPCr_MP).
+      apply (INS_impl A A).
+    }
+    refine [_; _].
+    + constructor.
+      2: apply nil.
+      split.
+      2: apply (Some HCPCr_CL1).
+      apply (INS_impl A (INS_impl A A)).
+    + constructor.
+      { split.
+        { apply (INS_impl
+                   (INS_impl A (INS_impl A A))
+                   (INS_impl A A)).
+        }
+        apply (Some HCPCr_MP).
+      }
+      refine [_;_].
+      * constructor.
+        2: apply nil.
+        split.
+        2: apply (Some HCPCr_CL1).
+        apply (INS_impl
+                 A
+                 (INS_impl
+                    (INS_impl A A)
+                    A)).
+      * constructor.
+        2: apply nil.
+        split.
+        2: apply (Some HCPCr_CL2).
+        apply (INS_impl
+                 (INS_impl
+                    A
+                    (INS_impl
+                       (INS_impl A A)
+                       A))
+                 (INS_impl
+                    (INS_impl A (INS_impl A A))
+                    (INS_impl A A))).
+  - split.
+    2: reflexivity.
+    repeat constructor; red; simpl.
+    + eexists _, _.
+      reflexivity.
+    + eexists _, _.
+      reflexivity.
+    + eexists _, _, _. reflexivity.
+    + eexists _, _. reflexivity.
+    + eexists _, _. reflexivity.
+Qed.
+
+Section PropositionalHilbertCalculus.
+End PropositionalHilbertCalculus.
 (* Claim: If for a [PropType] all connectives have an arity on which
 one can do recursion (i.e. in "practice" at most countable) and [var]
 has decidable equality (and some decidability or recursion on the type
