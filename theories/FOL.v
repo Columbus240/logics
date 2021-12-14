@@ -27,6 +27,9 @@ Axiom well_order_arbitrary_sum :
   the term algebra in the context of univ. algebra. *)
 Section PropositionalLanguage.
   Variables (L : PropType) (var : Type).
+  (* Necessary for making [PropFormula_eq] (provably) transitive,
+     without having to assume proof-irrelevance or somesuch. *)
+  Context `{Lc_dec : EqDec L.(connective) eq}.
 
   (* The type [var] indexes the variables. *)
   Inductive PropFormula : Type :=
@@ -56,8 +59,31 @@ Section PropositionalLanguage.
                            _ (fun i => complexity (f i)))
     end.
 
+  Instance PropFormula_eq_Refl : Reflexive PropFormula_eq.
+  Proof.
+    red; intros.
+    induction x; constructor; assumption.
+  Qed.
+
+  Instance PropFormula_eq_Sym : Symmetric PropFormula_eq.
+  Proof.
+    red; intros.
+    induction H; constructor; assumption.
+  Qed.
+
   Instance PropFormula_eq_Equivalence : Equivalence PropFormula_eq.
-  Admitted.
+  Proof.
+    split; try typeclasses eauto.
+    red; intros.
+    revert z H0.
+    induction H; intros z Hz; inversion Hz; subst; clear Hz.
+    { constructor. }
+    apply Eqdep_dec.inj_pair2_eq_dec in H3.
+    2: { assumption. }
+    subst.
+    constructor.
+    auto.
+  Qed.
 
   (* [EqDec_A] encapsulates that we "can do recursion" on
      [L.(connective_arity) c] for each [c]. But currently the
