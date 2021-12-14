@@ -23,6 +23,22 @@ Record PropType :=
      of defining arity not via [nat] but via the amount of elements in a type.
   *)
 
+Definition Equinumerous (A B : Type) :=
+  { p : (A -> B) * (B -> A) |
+    (forall x, (fst p) (snd p x) = x) /\
+      (forall x, (snd p) (fst p x) = x) }.
+
+(* [P0] is extended by [P1] *)
+Record PropTypeExtension (P0 P1 : PropType) :=
+  {
+    PTE_connective : P0.(connective) -> P1.(connective);
+    PTE_connective_inj : forall x y,
+      PTE_connective x = PTE_connective y -> x = y;
+    PTE_connective_arity :
+    forall x, Equinumerous (P0.(connective_arity) x)
+                           (P1.(connective_arity) (PTE_connective x));
+  }.
+
   (* NOTE: The def. of [PropFormula] is identical to the definition of
   the term algebra in the context of univ. algebra. *)
 Section PropositionalLanguage.
