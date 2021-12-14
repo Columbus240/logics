@@ -1,6 +1,8 @@
 Require Import EquivDec.
 Require Import SetoidClass.
 
+Require Import Calculi.
+
 Set Primitive Projections.
 Set Universe Polymorphism.
 
@@ -146,6 +148,14 @@ Section PropositionalLanguage.
       subst.
       apply H1.
   Defined.
+
+  Definition PropHilbertCalculus
+             {rules : Type} (rules_inferences : rules -> _) : Calculus :=
+    {|
+      structures := PropFormula;
+      rules := rules;
+      rules_inferences := rules_inferences;
+    |}.
 End PropositionalLanguage.
 
 (* Claim: If for a [PropType] all connectives have an arity on which
