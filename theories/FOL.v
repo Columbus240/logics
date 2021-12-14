@@ -14,10 +14,10 @@ Axiom well_order_arbitrary_sum :
 (** Propositional Languages *)
 (* Def. 2.59 in “PT for Fuzzy L.” *)
   (* corresponds to the signature of an algebra (in the context of univ. algebra). *)
-  Record PropType :=
-    { connective : Type;
-      connective_arity : connective -> Type; (* each connective has an arity *)
-    }.
+Record PropType :=
+  { connective : Type;
+    connective_arity : connective -> Type; (* each connective has an arity *)
+  }.
   (* Using the trick of Andrej Bauer
      https://gist.github.com/andrejbauer/3cc438ab38646516e5e9278fdb22022c
      of defining arity not via [nat] but via the amount of elements in a type.
