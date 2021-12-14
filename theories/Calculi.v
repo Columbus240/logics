@@ -1,3 +1,6 @@
+(* MAYBE: Define a separate type for schematic rules to simplify using
+   them? *)
+
 Set Primitive Projections.
 Set Universe Polymorphism.
 
@@ -32,7 +35,12 @@ Require Import Program.Basics.
 
 Definition DerivTree_root {C} : @DerivationTree C -> _ := compose fst RTree_root.
 
-Inductive Derivation {C : Calculus} (T : Ensemble C.(structures)) : DerivationTree C -> Type :=
+(* [Derivation] lives in [Prop], because once we have a derivation, it
+   shouldn’t really matter "how" it was proven correct.
+   The only things that appear here are [In] propositions, which
+   should always (in this case) be (able to be) proof-irrelevant.
+*)
+Inductive Derivation {C : Calculus} (T : Ensemble C.(structures)) : DerivationTree C -> Prop :=
 | Deriv_ax e : In _ T e -> Derivation T (RTree_cons (e, None) [])
 | Deriv_rule (e : C.(structures)) (prem : list (DerivationTree C)) r :
   ForallT (Derivation T) prem ->
@@ -41,8 +49,31 @@ Inductive Derivation {C : Calculus} (T : Ensemble C.(structures)) : DerivationTr
          |} ->
   Derivation T (RTree_cons (e, Some r) prem).
 
-Definition Derivable {C : Calculus} (T : Ensemble C.(structures)) (e : C.(structures)) : Prop :=
-  exists (D : DerivationTree C), inhabited (Derivation T D) /\ DerivTree_root D = e.
+Definition Derivable {C : Calculus} (T : Ensemble C.(structures)) (e : C.(structures)) : Type :=
+  { D : DerivationTree C | Derivation T D /\ DerivTree_root D = e }.
+
+Definition CalculusDecidableTautologies (C : Calculus) :=
+  forall s : C.(structures),
+    Derivable (Empty_set _) s + (Derivable (Empty_set _) s -> False).
+
+Definition CalculusDecidable (C : Calculus) :=
+  forall
+    (T : Ensemble C.(structures))
+    (Tdec : forall x, {In _ T x} + {~ In _ T x})
+    (s : C.(structures)),
+    Derivable T s + (Derivable T s -> False).
+
+Fact CalculusDecidable_impl_DecidableTautologies (C : Calculus) :
+  CalculusDecidable C -> CalculusDecidableTautologies C.
+Proof.
+  intros.
+  red; red in X.
+  apply X.
+  intros.
+  right.
+  intros ?.
+  destruct H.
+Defined.
 
 (* If the set of axioms [T] and the set of rules are decidable, then
    we can decide whether a given tree is a [Derivation T] or not. *)
@@ -72,7 +103,7 @@ Proof.
   2: {
     right.
     intros ?.
-    inversion X; subst; clear X.
+    inversion H; subst; clear H.
     { apply f.
       constructor.
     }
@@ -86,14 +117,14 @@ Proof.
     }
     right.
     intros ?.
-    inversion X; subst; clear X.
+    inversion H; subst; clear H.
     contradiction.
   - (* Axiom *)
     destruct l.
     2: {
       right.
       intros ?.
-      inversion X; subst; clear X.
+      inversion H; subst; clear H.
     }
     destruct (T_dec a).
     + left.
@@ -101,7 +132,7 @@ Proof.
       assumption.
     + right.
       intros ?.
-      inversion X; subst; clear X; try contradiction.
+      inversion H; subst; clear H; try contradiction.
 Defined.
 
 (* Prop. 3.7a in “PT for FL” *)
@@ -114,8 +145,8 @@ Proof.
     assumption.
   }
   constructor; auto.
-  clear i.
-  induction f.
+  clear H0.
+  induction X.
   { constructor. }
   constructor.
   { eapply Derivable_monotonous;
@@ -141,8 +172,8 @@ Proof.
   - simpl.
     rewrite Forall_concat.
     rewrite Forall_map.
-    clear i.
-    induction f.
+    clear H.
+    induction X.
     { constructor. }
     constructor.
     2: { assumption. }
@@ -158,8 +189,8 @@ Proof.
     repeat constructor.
   }
   constructor; try assumption.
-  clear i.
-  induction f.
+  clear H.
+  induction X.
   { constructor. }
   constructor.
   - apply (Derivable_compactness_list_correct_1 _ _ a) in p.
@@ -169,7 +200,7 @@ Proof.
     rewrite in_app_iff.
     left. assumption.
   - eapply ForallT_impl.
-    2: { apply IHf. }
+    2: { apply IHX. }
     apply Derivable_monotonous.
     intros ? ?.
     red. simpl.
@@ -222,6 +253,45 @@ Record CalculusExtension (C0 C1 : Calculus) :=
 Arguments CE_structure {_} {_} _.
 Arguments CE_rules {_} {_} _.
 
+(* Extend a given calculus [C] with an additional set of rules. *)
+Definition CE_RuleExtension (C : Calculus)
+           {r : Type} (r_inf : r -> _)
+  : Calculus :=
+  {|
+    structures := C.(structures);
+    rules := C.(rules) + r;
+    rules_inferences :=
+    fun r0 =>
+      match r0 with
+      | inl r0 => C.(rules_inferences) r0
+      | inr r0 => r_inf r0
+      end;
+  |}.
+
+Lemma map_id {A : Type} (l : list A) :
+  map id l = l.
+Proof.
+  induction l.
+  - reflexivity.
+  - simpl.
+    unfold id at 1.
+    congruence.
+Qed.
+
+Program Definition CE_RuleExtension_Extension (C : Calculus) {r} (r_inf : r -> _) :
+  CalculusExtension C (CE_RuleExtension C r_inf) :=
+  {|
+    CE_structure := id;
+    CE_rules := inl;
+  |}.
+Next Obligation.
+  intros ? ?.
+  inversion H; subst; clear H.
+  rewrite map_id.
+  unfold id.
+  assumption.
+Qed.
+
 Section CalculusExtension.
   (* The extension of a calculus preserves derivations. *)
   Context {C0 C1 : Calculus}.
@@ -262,7 +332,7 @@ Section CalculusExtension.
       rewrite map_map.
       eexists; try eassumption.
       simpl.
-      clear i f r.
+      clear H X r.
       induction prem.
       { simpl. reflexivity. }
       simpl.
@@ -271,13 +341,13 @@ Section CalculusExtension.
       rewrite CE_DerivationTree_DerivTree_root.
       reflexivity.
     }
-    clear r i.
+    clear r H.
     apply ForallT_map0.
-    induction f.
+    induction X.
     { constructor. }
     constructor.
     2: assumption.
-    clear IHf.
+    clear IHX.
     apply CE_Derivation.
     assumption.
   Defined.
