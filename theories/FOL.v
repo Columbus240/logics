@@ -1,10 +1,13 @@
 Require Import EquivDec.
 Require Import SetoidClass.
+Require Import RelationClasses.
+      Locate Eqdep_dec.inj_pair2_eq_dec.
 
 Require Import Calculi.
 
 Set Primitive Projections.
 Set Universe Polymorphism.
+Set Default Goal Selector "!".
 
 Axiom well_order : Type.
 Axiom well_order_zero : well_order.
@@ -312,6 +315,16 @@ Section SequentCalculus.
   (* How to best abstract what a rule is? *)
 End SequentCalculus.
 
+(* MAYBE: There are multiple ways to do sequent calculus: using lists
+   or using multisets or using sets. We could formalize all of these
+   and provide "bridge" theorems between them. I.e. a sequent calculus
+   using sets has contraction as a multiset calculus and a multiset
+   calculus has exchange as a list calculus.
+*)
+
+(* MAYBE: Define boolean algebras and use this to give a semantics to
+   classical logic *)
+
 (*Section Classical_Propositional_Logic.*)
   (* This def. is too specific. Lift it to the more general system.
 Inductive Formula : Set :=
@@ -322,3 +335,135 @@ Inductive Formula : Set :=
 | impl : Formula -> Formula -> Formula.
 
 *)
+
+Variant BA_Connectives :=
+| BA_and | BA_or | BA_neg | BA_bot | BA_top.
+
+Let Empty := Datatypes.Empty_set.
+
+Definition BooleanAlgebraSig : PropType :=
+  {|
+    connective := BA_Connectives;
+    connective_arity :=
+    fun c =>
+      match c with
+      | BA_and => unit + unit
+      | BA_or => unit + unit
+      | BA_neg => unit
+      | BA_bot => Empty
+      | BA_top => Empty
+      end%type;
+|}.
+
+Record FOLanguage :=
+  { FOL_predicate : Type;
+    FOL_predicate_arity : FOL_predicate -> Type;
+    FOL_function : Type;
+    FOL_function_arity : FOL_function -> Type;
+    FOL_connective : Type;
+    FOL_connective_arity : FOL_connective -> Type;
+  }.
+
+Section FirstOrderLanguage.
+  Variables (L : FOLanguage) (var : Type).
+  Context `{Lf_dec : EqDec L.(FOL_function) eq}.
+  Context `{Lp_dec : EqDec L.(FOL_predicate) eq}.
+  Context `{Lc_dec : EqDec L.(FOL_connective) eq}.
+
+  Inductive FOLTerm : Type :=
+  | FOL_Tvar : var -> FOLTerm
+  | FOL_Tfun (f : L.(FOL_function)) (a : L.(FOL_function_arity) f -> FOLTerm) : FOLTerm.
+
+  Inductive FOLTerm_eq : FOLTerm -> FOLTerm -> Prop :=
+  | FOLT_eq_var v :
+    FOLTerm_eq (FOL_Tvar v) (FOL_Tvar v)
+  | FOLT_eq_fun f a0 a1 :
+    (forall i, FOLTerm_eq (a0 i) (a1 i)) ->
+    FOLTerm_eq (FOL_Tfun f a0) (FOL_Tfun f a1).
+
+  Instance FOLTerm_eq_Refl : Reflexive FOLTerm_eq.
+  Proof.
+    red; intros.
+    induction x; constructor; assumption.
+  Qed.
+
+  Instance FOLTerm_eq_Sym : Symmetric FOLTerm_eq.
+  Proof.
+    red; intros.
+    induction H; constructor; assumption.
+  Qed.
+
+  Instance FOLTerm_eq_Equivalence : Equivalence FOLTerm_eq.
+  Proof.
+    split; try typeclasses eauto.
+    red; intros.
+    revert z H0.
+    induction H; intros z Hz; inversion Hz; subst; clear Hz.
+    { constructor. }
+    apply Eqdep_dec.inj_pair2_eq_dec in H3.
+    2: assumption.
+    subst. constructor. auto.
+  Qed.
+
+  (* First-order language with equality. *)
+  Inductive FOLFormula : Type :=
+  | FOL_eq : FOLTerm -> FOLTerm -> FOLFormula
+  | FOL_pred (p : L.(FOL_predicate)) (t : L.(FOL_predicate_arity) p -> FOLTerm) : FOLFormula
+  | FOL_conn (c : L.(FOL_connective)) (f : L.(FOL_connective_arity) c -> FOLFormula) : FOLFormula
+  | FOL_all : var -> FOLFormula -> FOLFormula
+  | FOL_ex : var -> FOLFormula -> FOLFormula.
+
+  Inductive FOLFormula_eq : FOLFormula -> FOLFormula -> Prop :=
+  | FOL_eq_eq t00 t01 t10 t11 :
+    FOLTerm_eq t00 t10 ->
+    FOLTerm_eq t01 t11 ->
+    FOLFormula_eq (FOL_eq t00 t01) (FOL_eq t10 t11)
+  | FOL_eq_pred p t0 t1 :
+    (forall i, FOLTerm_eq (t0 i) (t1 i)) ->
+    FOLFormula_eq (FOL_pred p t0) (FOL_pred p t1)
+  | FOL_eq_conn c f0 f1 :
+    (forall i, FOLFormula_eq (f0 i) (f1 i)) ->
+    FOLFormula_eq (FOL_conn c f0) (FOL_conn c f1)
+  | FOL_eq_all v f0 f1 :
+    FOLFormula_eq f0 f1 ->
+    FOLFormula_eq (FOL_all v f0) (FOL_all v f1)
+  | FOL_eq_ex v f0 f1 :
+    FOLFormula_eq f0 f1 ->
+    FOLFormula_eq (FOL_ex v f0) (FOL_ex v f1).
+
+  Instance FOLFormula_eq_Refl : Reflexive FOLFormula_eq.
+  Proof using.
+    red; intros.
+    induction x; constructor; try assumption; reflexivity.
+  Qed.
+
+  Instance FOLFormula_eq_Symm : Symmetric FOLFormula_eq.
+  Proof using.
+    red; intros.
+    induction H; constructor; try assumption;
+      intros; symmetry; auto.
+  Qed.
+
+  Instance FOLFormula_eq_Equivalence : Equivalence FOLFormula_eq.
+  Proof using Lc_dec Lf_dec Lp_dec.
+    split; try typeclasses eauto.
+    red; intros.
+    revert z H0.
+    induction H; intros z Hz; inversion Hz; subst; clear Hz;
+      constructor; auto.
+    - (* FOL_eq *)
+      transitivity t10; assumption.
+    - (* FOL_eq *)
+      transitivity t11; assumption.
+    - (* FOL_pred *)
+      apply Eqdep_dec.inj_pair2_eq_dec in H2.
+      2: assumption.
+      subst. intros.
+      transitivity (t1 i); auto.
+    - (* FOL_conn *)
+      apply Eqdep_dec.inj_pair2_eq_dec in H3.
+      2: assumption.
+      subst. intros. apply H0.
+      auto.
+  Qed.
+End FirstOrderLanguage.
