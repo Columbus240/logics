@@ -1,0 +1,3 @@
+[submodule "dep/category-theory"]
+	path = dep/category-theory
+	url = ../category-theory/
