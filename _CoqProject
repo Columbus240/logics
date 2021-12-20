@@ -1,4 +1,5 @@
 -R theories Logics
+-Q dep/category-theory Category
 
 theories/Calculi.v
 theories/Utils.v

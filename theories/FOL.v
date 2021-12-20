@@ -1,7 +1,6 @@
 Require Import EquivDec.
 Require Import SetoidClass.
 Require Import RelationClasses.
-      Locate Eqdep_dec.inj_pair2_eq_dec.
 
 Require Import Calculi.
 
@@ -16,13 +15,12 @@ Axiom well_order_succ : well_order -> well_order.
 Axiom well_order_arbitrary_sum :
   forall (I : Type) (F : I -> well_order), well_order.
 
+Require Import Category.Instance.Algebra.
+
 (** Propositional Languages *)
 (* Def. 2.59 in “PT for Fuzzy L.” *)
   (* corresponds to the signature of an algebra (in the context of univ. algebra). *)
-Record PropType :=
-  { connective : Type;
-    connective_arity : connective -> Type; (* each connective has an arity *)
-  }.
+Definition PropType := Signature.
   (* Using the trick of Andrej Bauer
      https://gist.github.com/andrejbauer/3cc438ab38646516e5e9278fdb22022c
      of defining arity not via [nat] but via the amount of elements in a type.
@@ -33,16 +31,21 @@ Definition Equinumerous (A B : Type) :=
     (forall x, (fst p) (snd p x) = x) /\
       (forall x, (snd p) (fst p x) = x) }.
 
+Require Import Category.Theory.Isomorphism.
+Import Category.Instance.Coq.
+
 (* [P0] is extended by [P1] *)
 Record PropTypeExtension (P0 P1 : PropType) :=
   {
-    PTE_connective : P0.(connective) -> P1.(connective);
+    PTE_connective : P0.(operations) -> P1.(operations);
     PTE_connective_inj : forall x y,
       PTE_connective x = PTE_connective y -> x = y;
     PTE_connective_arity :
-    forall x, Equinumerous (P0.(connective_arity) x)
-                           (P1.(connective_arity) (PTE_connective x));
+    forall x, (op_arity x) ≅[Coq] (op_arity (PTE_connective x));
   }.
+
+Arguments term_atom {_} {_} _.
+Arguments term_op {_} {_} _ _.
 
   (* NOTE: The def. of [PropFormula] is identical to the definition of
   the term algebra in the context of univ. algebra. *)
@@ -50,107 +53,82 @@ Section PropositionalLanguage.
   Variables (L : PropType) (var : Type).
   (* Necessary for making [PropFormula_eq] (provably) transitive,
      without having to assume proof-irrelevance or somesuch. *)
-  Context `{Lc_dec : EqDec L.(connective) eq}.
+  Context `{Lc_dec : EqDec L.(operations) eq}.
 
   (* The type [var] indexes the variables. *)
-  Inductive PropFormula : Type :=
-  | PF_var : var -> PropFormula
-  | PF_connective (c : L.(connective)) (f : L.(connective_arity) c -> PropFormula) : PropFormula.
-
-  Inductive PropFormula_eq : PropFormula -> PropFormula -> Prop :=
-  | PF_eq_var v :
-    PropFormula_eq (PF_var v) (PF_var v)
-  | PF_eq_connective c f0 f1 :
-    (forall i, PropFormula_eq (f0 i) (f1 i)) ->
-    PropFormula_eq (PF_connective c f0) (PF_connective c f1).
+  Definition PropFormula := @Terms L var.
 
   (* [A] is a subformula of [B] iff [subformula A B] *)
   Inductive subformula : PropFormula -> PropFormula -> Prop :=
   | subformula_refl A : subformula A A
-  | subformula_compat A c (f : L.(connective_arity) c -> PropFormula) i :
+  | subformula_compat A c (f : op_arity c -> PropFormula) i :
     subformula A (f i) ->
-    subformula A (PF_connective c f).
+    subformula A (term_op c f).
 
   (* Assigns each [PropFormula] a well-order, i.e. an ordinal. *)
   Fixpoint complexity (A : PropFormula) : well_order :=
     match A with
-    | PF_var _ => well_order_one
-    | PF_connective c f =>
+    | term_atom _ => well_order_one
+    | term_op c f =>
         well_order_succ (well_order_arbitrary_sum
                            _ (fun i => complexity (f i)))
     end.
 
-  Instance PropFormula_eq_Refl : Reflexive PropFormula_eq.
-  Proof.
-    red; intros.
-    induction x; constructor; assumption.
-  Qed.
+  Import Category.Lib.Setoid.
+  Existing Instance Algebra.Terms_Setoid.
 
-  Instance PropFormula_eq_Sym : Symmetric PropFormula_eq.
-  Proof.
-    red; intros.
-    induction H; constructor; assumption.
-  Qed.
-
-  Instance PropFormula_eq_Equivalence : Equivalence PropFormula_eq.
-  Proof.
-    split; try typeclasses eauto.
-    red; intros.
-    revert z H0.
-    induction H; intros z Hz; inversion Hz; subst; clear Hz.
-    { constructor. }
-    apply Eqdep_dec.inj_pair2_eq_dec in H3.
-    2: { assumption. }
-    subst.
-    constructor.
-    auto.
-  Qed.
-
-  (* [EqDec_A] encapsulates that we "can do recursion" on
-     [L.(connective_arity) c] for each [c]. But currently the
-     statement is too strong. *)
-  Lemma PropFormula_eqdec_unusable (EqDec_C : EqDec L.(connective) eq)
-        (EqDec_A : forall c (f0 f1 : L.(connective_arity) c -> PropFormula),
-            { forall i, f0 i === f1 i } + { ~ forall i, f0 i === f1 i })
+  (* Add well-founded recursion on the complexity to complete this.
+     And a sufficient condition on each [op_arity o]. *)
+  Fixpoint Terms_equiv_EqDec
+        (EqDec_C : EqDec L.(operations) eq)
         (EqDec_V : EqDec var eq)
-    : EqDec PropFormula PropFormula_eq.
+    (x y : Terms var) :
+    (x ≈ y) + ( x ≈ y -> Empty_set ).
   Proof.
-    red.
-    induction x.
-    - (* x = PF_var _ *)
-      induction y.
-      2: {
-        right. intros ?.
-        inversion H; subst; clear H.
+    refine (
+    match x, y with
+    | term_atom v0, term_atom v1 =>
+        if EqDec_V v0 v1 then
+          inl _
+        else
+          inr _
+    | term_op c0 f0, term_op c1 f1 =>
+        if EqDec_C c0 c1 then
+          _
+        else
+          inr _
+    | term_atom _, term_op _ _ => inr _
+    | term_op _ _, term_atom _ => inr _
+    end).
+    - red in e. subst.
+      constructor.
+    - intros.
+      red in c.
+      inversion X; subst; clear X.
+      unshelve epose proof (c _). { reflexivity. }
+      contradiction.
+    - intros.
+      inversion X; subst; clear X.
+    - intros.
+      inversion X; subst; clear X.
+    - inversion e; subst; clear e.
+      assert ((forall i, f0 i ≈ f1 i) + ((forall i, f0 i ≈ f1 i) -> Empty_set)).
+      { (* TODO: Add a recursion here. somehow. *)
+        admit.
       }
-      specialize (EqDec_V v v0) as [|].
-      + left. red in e. subst. constructor.
-      + right. intros ?.
-        inversion H; subst; clear H.
-        red in c. congruence.
-    - (* x = PF_connective _ _ *)
-      induction y.
-      { right. intros ?.
-        inversion H; subst; clear H.
-      }
-      destruct (EqDec_C c c0) as [|].
-      2: {
-        right. intros ?.
-        inversion H; subst; clear H.
-        apply c1.
-        reflexivity.
-      }
-      red in e. subst.
-      specialize (EqDec_A c0 f f0) as [|].
-      { left. constructor. assumption. }
-      right. intros ?.
-      red in H.
-      apply n. intros.
-      inversion H; subst; clear H.
-      apply Eqdep_dec.inj_pair2_eq_dec in H2, H3; try assumption.
+      destruct X; [left|right].
+      + constructor. assumption.
+      + intros.
+        inversion X; subst; clear X.
+        apply Eqdep_dec.inj_pair2_eq_dec in H, H1; try assumption.
+        subst. auto.
+    - intros.
+      inversion X; subst; clear X.
+      apply Eqdep_dec.inj_pair2_eq_dec in H1, H3; try assumption.
       subst.
-      apply H1.
-  Defined.
+      unshelve epose proof (c _). { reflexivity. }
+      contradiction.
+  Admitted.
 
   Definition PropHilbertCalculus
              {rules : Type} (rules_inferences : rules -> _) : Calculus :=
