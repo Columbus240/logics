@@ -44,9 +44,6 @@ Record PropTypeExtension (P0 P1 : PropType) :=
     forall x, (op_arity x) ≅[Coq] (op_arity (PTE_connective x));
   }.
 
-Arguments term_atom {_} {_} _.
-Arguments term_op {_} {_} _ _.
-
   (* NOTE: The def. of [PropFormula] is identical to the definition of
   the term algebra in the context of univ. algebra. *)
 Section PropositionalLanguage.
